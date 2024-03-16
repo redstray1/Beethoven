@@ -63,7 +63,7 @@ with yt_dlp.YoutubeDL(opts) as ydl:
 
     full_url = info['url']
 
-    trim(full_url, 'test.mp4', start, end)
+    trim(full_url, target_path, start, end)
 
   # print(info['url'])
 
