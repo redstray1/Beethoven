@@ -58,14 +58,42 @@ class VideoSaver:
             pw *= 60
         return cur
     
+    def get_audio_url(self, url : str):
+
+        opts = {
+            **self.ydl.params,
+            "writesubtitles" : False,
+            "writeautomaticsub" : False, 
+            "simulate" : True,
+            "quiet" : True,
+            "forceurl" : True,
+            "format" : "ba"
+        }
+
+        old_params = self.ydl.params.copy()
+        self.ydl.params = opts
+
+        print(self.ydl.params)
+
+        info = self.ydl.extract_info(url, download=False)
+
+        print(info['url'])
+
+        self.ydl.params = old_params
+
+
     def download(self, url : str, start_time : str, end_time : str, output_path : str, **kwargs):
         start = self.convert_time_to_secs(start_time)
         end = self.convert_time_to_secs(end_time)
 
         if 'opts' in kwargs:
-            self.ydl = kwargs['opts']
+            old_params = self.ydl.params.copy()
+            self.ydl.params = kwargs['opts']
         
         info = self.ydl.extract_info(url, download=False)
+
+        if 'opts' in kwargs:
+            self.ydl.params = old_params
 
         if start < 0:
             start = 0
