@@ -25,13 +25,13 @@ class VideoFaceCropper():
                                                                  static_image_mode=landmark_detector_static_image_mode,
                                                                  min_detection_confidence=min_landmark_detector_confidence)
 
-    def _get_bounding_box_inflation_factor(self, eye_coords, amplification=2, base_inflation=1):
+    def get_face_region_factor(self, eye_coords, amplification=2, base_inflation=1):
         roll_angle = self._get_face_roll_angle([eye_coords[0].x, 1 - eye_coords[0].y], [eye_coords[1].x, 1 - eye_coords[1].y])
-        inflation_factor = np.abs(roll_angle) / 90
+        region_factor = np.abs(roll_angle) / 90
 
-        return base_inflation + (inflation_factor * amplification)
+        return base_inflation + (region_factor * amplification)
     
-    def _get_inflated_face_image(self, image, face_box, inflation):
+    def _get_face_region(self, image, face_box, inflation):
 
         width_inflation, height_inflation = face_box.width * inflation, face_box.height * inflation
 
@@ -148,7 +148,7 @@ class VideoFaceCropper():
 
             #eyes
             eyes = face.location_data.relative_keypoints[:2]
-            inflation_factor = self._get_bounding_box_inflation_factor(eyes)
+            region_factor = self.get_face_region_factor(eyes)
             for eye in eyes[:1]:
                 cv2.circle(image_debug, (round(eye.x * image.shape[1]), round(eye.y * image.shape[0])), 1, (0, 255, 0))
             for eye in eyes[1:]:
@@ -189,7 +189,7 @@ class VideoFaceCropper():
             )
 
             #inflation box
-            width_inflation, height_inflation = face_box.width * inflation_factor, face_box.height * inflation_factor
+            width_inflation, height_inflation = face_box.width * region_factor, face_box.height * region_factor
             cv2.rectangle(
                 image_debug,
                 (round((face_box.xmin - width_inflation / 2) * image.shape[1]), round((face_box.ymin + face_box.height + height_inflation / 2) * image.shape[0])),
@@ -216,23 +216,23 @@ class VideoFaceCropper():
             
             if 0 <= face.location_data.relative_bounding_box.xmin <= 1 and 0 <= face.location_data.relative_bounding_box.ymin <= 1:
 
-                inflation_factor = self._get_bounding_box_inflation_factor(face.location_data.relative_keypoints[:2])
-                inflated_face_image = self._get_inflated_face_image(imgRGB, face.location_data.relative_bounding_box, inflation_factor)
-                detected_landmarks = self.landmark_detector.process(inflated_face_image).multi_face_landmarks
+                region_factor = self.get_face_region_factor(face.location_data.relative_keypoints[:2])
+                face_region = self._get_face_region(imgRGB, face.location_data.relative_bounding_box, region_factor)
+                detected_landmarks = self.landmark_detector.process(face_region).multi_face_landmarks
 
                 if detected_landmarks is not None:
                     face_landmarks = detected_landmarks[0].landmark
 
                     if correct_roll:
-                        inflated_face_image, face_landmarks = self._get_roll_corrected_image_and_landmarks(inflated_face_image, face_landmarks)
+                        face_region, face_landmarks = self._get_roll_corrected_image_and_landmarks(face_region, face_landmarks)
                     else:
                         face_landmarks = np.ndarray.astype(np.rint(np.array([
-                            np.multiply([landmark.x for landmark in face_landmarks], inflated_face_image.shape[1]),
-                            np.multiply([landmark.y for landmark in face_landmarks], inflated_face_image.shape[0])])), np.int64)
+                            np.multiply([landmark.x for landmark in face_landmarks], face_region.shape[1]),
+                            np.multiply([landmark.y for landmark in face_landmarks], face_region.shape[0])])), np.int64)
 
                     face_images.append(
                         self._crop_within_bounds(
-                            inflated_face_image,
+                            face_region,
                             face_landmarks[1, np.argmin(face_landmarks[1, :])], face_landmarks[1, np.argmax(face_landmarks[1, :])],
                             face_landmarks[0, np.argmin(face_landmarks[0, :])], face_landmarks[0, np.argmax(face_landmarks[0, :])]
                         )
