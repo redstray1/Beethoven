@@ -1,13 +1,21 @@
 from videoFaceCropper import VideoFaceCropper
 import cv2
+import sys
+
+input_file = sys.argv[1]
+
+output_file = 'output.mp4'
+
+if len(sys.argv[1]) > 2:
+    output_file = sys.argv[2]
 
 vfc = VideoFaceCropper()
 
-cap = cv2.VideoCapture('data/0/0.mp4')
+cap = cv2.VideoCapture(input_file)
 
 output_size = (640, 480)
 
-video= cv2.VideoWriter("output.mp4", cv2.VideoWriter_fourcc(*'mp4v'), 30, output_size)
+video= cv2.VideoWriter(output_file, cv2.VideoWriter_fourcc(*'mp4v'), 30, output_size)
 
 face_frames = []
 

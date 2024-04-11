@@ -2,6 +2,7 @@ import cv2
 import numpy as np
 import mediapipe as mp
 import os
+import cv2
 
 class VideoFaceCropper():
 
@@ -10,7 +11,7 @@ class VideoFaceCropper():
     LONG_RANGE = 1
 
     #landmarks options
-    STATIC_MODE = True
+    STATIC_MODE = False
     TRACKING_MODE = False
 
     def __init__(self, min_face_detector_confidence=0.5, face_detector_model_selection=LONG_RANGE,
@@ -210,7 +211,7 @@ class VideoFaceCropper():
         detected_faces = self.face_detector.process(imgRGB).detections
 
         if detected_faces is None:
-            return face_images
+            return None
 
         for face in detected_faces:
             
@@ -238,3 +239,41 @@ class VideoFaceCropper():
                         )
                     )
         return face_images
+    
+    def crop_video(self, infilename, outfilename, *, correct_roll = True, bad_frames_threshold = 10, show=False):
+        cap = cv2.VideoCapture(infilename)
+        
+        
+
+        face_frames = []
+
+        bad_frames = 0
+
+        while True:
+            success, frame = cap.read()
+
+            if not success:
+                print('Frame not captured')
+                break
+            
+            face_images = self.crop_image(frame, correct_roll=correct_roll)
+            if (face_images is None) or (face_images == []):
+                print("No faces detected")
+                bad_frames += 1
+            else:
+                if show:
+                    for i, face in enumerate(face_images):
+                        cv2.imshow(f'Face {i}', cv2.cvtColor(face, cv2.COLOR_RGB2BGR))
+                face_frames.append(cv2.cvtColor(face_images[0], cv2.COLOR_RGB2BGR))
+        cap.release()
+
+        if bad_frames > bad_frames_threshold:
+            return False
+        
+        output_size = (640, 480)
+        video= cv2.VideoWriter(outfilename, cv2.VideoWriter_fourcc(*'mp4v'), 30, output_size)
+        for frame in face_frames:
+            video.write(cv2.resize(frame, output_size ))
+        
+        video.release()
+        return True
