@@ -18,6 +18,10 @@ class VideoFaceCropper():
                  landmark_detector_static_image_mode=STATIC_MODE, min_landmark_detector_confidence=0.5):
         self._LEFT_EYE_LANDMARK_INDICES = [362, 382, 381, 380, 374, 373, 390, 249, 263, 466, 388, 387, 386, 385, 384, 398]
         self._RIGHT_EYE_LANDMARK_INDICES = [33, 7, 163, 144, 145, 153, 154, 155, 133, 173, 157, 158, 159, 160, 161, 246]
+        
+        self._FACE_LANDMARKS_INDECES = [33, 263, 1, 61, 291, 199]
+        self._YAW_THRESHOLD = 15
+        self._PITCH_THRESHOLD = 15
 
         self.face_detector = mp.solutions.face_detection.FaceDetection(min_detection_confidence=min_face_detector_confidence,
                                                                        model_selection=face_detector_model_selection)
@@ -240,6 +244,69 @@ class VideoFaceCropper():
                     )
         return face_images
     
+    def get_head_tilt(self, image):
+        """
+        Return:
+        Forward = 0
+        Up = 1
+        Right = 2
+        Down = 3
+        Left = 4
+        """
+        imgRGB = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+
+        results = self.landmark_detector.process(imgRGB)
+
+        img_h, img_w, img_c = imgRGB.shape
+        face_2d = []
+        face_3d = []
+        head_tilt_type = -1
+        if results.multi_face_landmarks:
+            for id,lm in enumerate(results.multi_face_landmarks[0].landmark):
+                if id in self._FACE_LANDMARKS_INDECES:
+                    x, y = int(lm.x * img_w), int(lm.y * img_h)
+                    face_2d.append([x, y])
+                    face_3d.append([x, y, lm.z])
+            
+            face_2d = np.array(face_2d, dtype=np.float64)
+            face_3d = np.array(face_3d, dtype=np.float64)
+
+            focal_length_x = img_w
+            focal_length_y = img_h
+
+            focal_length = (focal_length_x + focal_length_y) / 2
+
+            intrinsic_matrix = np.array([[focal_length, 0, img_h / 2],
+                            [0, focal_length, img_w / 2],
+                            [0, 0, 1]])
+            distort_matrix = np.zeros((4, 1), dtype=np.float64)
+            success, rotation_vector, translation_vector = cv2.solvePnP(face_3d, face_2d, intrinsic_matrix, distort_matrix)
+
+            rotation_matrix, jacobian = cv2.Rodrigues(rotation_vector)
+
+            angles,R,Q,Qx,Qy,Qz = cv2.RQDecomp3x3(rotation_matrix)
+
+            x, y, z = angles[0] * 360, angles[1] * 360, angles[2] * 360
+            
+            head_tilt_type = 0
+
+            if y < -self._YAW_THRESHOLD:
+                text = 'Left'
+                head_tilt_type = 4
+            elif y > self._YAW_THRESHOLD:
+                text = 'Right'
+                head_tilt_type = 2
+            elif x < -self._PITCH_THRESHOLD:
+                text = 'Down'
+                head_tilt_type = 3
+            elif x > self._PITCH_THRESHOLD:
+                text = 'Up'
+                head_tilt_type = 1
+            else:
+                text = 'Forward'
+                head_tilt_type = 0
+        return head_tilt_type
+
     def crop_video(self, infilename, outfilename, *, correct_roll = True, bad_frames_threshold = 10, show=False):
         cap = cv2.VideoCapture(infilename)
         
@@ -248,6 +315,7 @@ class VideoFaceCropper():
         face_frames = []
 
         bad_frames = 0
+        many_faces_frames = 0
 
         while True:
             success, frame = cap.read()
@@ -257,9 +325,13 @@ class VideoFaceCropper():
                 break
             
             face_images = self.crop_image(frame, correct_roll=correct_roll)
-            if (face_images is None) or (face_images == []):
-                print("No faces detected")
-                bad_frames += 1
+            head_tilt = self.get_head_tilt(frame)
+            if (face_images is None) or (face_images == []) or ((face_images is not None) and len(face_images) > 1) or (head_tilt != 0):
+                #print("No faces detected")
+                if ((face_images is not None) and len(face_images) > 1):
+                    many_faces_frames += 1
+                else:
+                    bad_frames += 1
             else:
                 if show:
                     for i, face in enumerate(face_images):
@@ -267,7 +339,7 @@ class VideoFaceCropper():
                 face_frames.append(cv2.cvtColor(face_images[0], cv2.COLOR_RGB2BGR))
         cap.release()
 
-        if bad_frames > bad_frames_threshold:
+        if (bad_frames > bad_frames_threshold) or (many_faces_frames > 0):
             return False
         
         output_size = (640, 480)
