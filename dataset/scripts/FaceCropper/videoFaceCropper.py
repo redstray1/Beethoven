@@ -11,7 +11,7 @@ class VideoFaceCropper():
     LONG_RANGE = 1
 
     #landmarks options
-    STATIC_MODE = False
+    STATIC_MODE = True
     TRACKING_MODE = False
 
     def __init__(self, min_face_detector_confidence=0.5, face_detector_model_selection=LONG_RANGE,
@@ -95,8 +95,8 @@ class VideoFaceCropper():
 
     def _get_roll_corrected_image_and_landmarks(self, face_image, face_landmarks):
         left_eye_centre, right_eye_centre = self._get_eyes_centres(
-            [face_landmarks[lm - 1] for lm in self._LEFT_EYE_LANDMARK_INDICES],
-            [face_landmarks[lm - 1] for lm in self._RIGHT_EYE_LANDMARK_INDICES]
+            [face_landmarks[lm] for lm in self._LEFT_EYE_LANDMARK_INDICES],
+            [face_landmarks[lm] for lm in self._RIGHT_EYE_LANDMARK_INDICES]
         )
 
         eyes_midpoint = self._get_eyes_midpoint(left_eye_centre, right_eye_centre, face_image.shape)
