@@ -15,6 +15,21 @@ import random
 
 import torchvision.transforms.functional
 
+def ctc_collate(batch):
+    xs, ys, lens, indices = zip(*batch)
+    max_len = max(lens)
+    x = default_collate(xs)
+    x.narrow(2, 0, max_len)
+    y = []
+    for sub in ys:
+        y += sub
+    y = torch.IntTensor(y)
+    lengths = torch.IntTensor(lens)
+    y_lengths = torch.IntTensor([len(label) for label in ys])
+    ids = default_collate(indices)
+
+    return x, y, lengths, y_lengths, ids
+
 class BEETDataset(Dataset):
     TRAIN_VAL_RANDOM_SEED = 42
     VAL_RATIO = 0.05
@@ -56,6 +71,7 @@ class BEETDataset(Dataset):
                 model_type=model_type, model_prefix=sp_model_prefix,
                 normalization_rule_name=normalization_rule_name,
                 pad_id=3,
+                control_symbols='|'
             )
 
         self.sp_model = SentencePieceProcessor(model_file=sp_model_prefix + '.model')
@@ -132,12 +148,16 @@ class BEETDataset(Dataset):
         pass
 
     def __getitem__(self, item : int) -> Tuple[torch.Tensor, int]:
-        x = torch.zeros(self.max_frames, 3, self.frame_height, self.frame_width)
+        x = torch.zeros(3, self.max_frames, self.frame_height, self.frame_width)
 
         d = self.dataset[item]
 
         frames, align, sub = self.read_data(d)
-        x[:, : frames.size(1) :, :] = frames
+        frames = frames.permute(1, 0, 2, 3)
+        if frames.size(1) > self.max_frames:
+            x = frames[:, : self.max_frames]
+        else:
+            x[:, : frames.size(1) :, :] = frames
 
         length = frames.size(1)
 
